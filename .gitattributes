@@ -1,0 +1,58 @@
+# ===============================
+# akxOS-Pi Git Attributes Config
+# ===============================
+# Ensures all source and text files use LF line endings (Linux style)
+# Prevents CRLF ↔ LF conversion issues when developing on Windows.
+
+# -------------------------------
+# Core Source Files
+# -------------------------------
+*.c      text eol=lf
+*.h      text eol=lf
+*.cpp    text eol=lf
+*.S      text eol=lf
+
+# -------------------------------
+# Scripts & Tools
+# -------------------------------
+*.py     text eol=lf
+*.sh     text eol=lf
+*.pl     text eol=lf
+*.bash   text eol=lf
+
+# -------------------------------
+# Configuration & Docs
+# -------------------------------
+*.md     text eol=lf
+*.txt    text eol=lf
+*.csv    text eol=lf
+*.json   text eol=lf
+*.yaml   text eol=lf
+*.yml    text eol=lf
+
+# -------------------------------
+# Build & Project Files
+# -------------------------------
+Makefile text eol=lf
+*.mk     text eol=lf
+*.gitignore text eol=lf
+
+# -------------------------------
+# Compiled or Binary Files (No Conversion)
+# -------------------------------
+*.ko     binary
+*.o      binary
+*.bin    binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.pdf    binary
+*.zip    binary
+*.tar    binary
+*.gz     binary
+
+# -------------------------------
+# Misc
+# -------------------------------
+*.log    text eol=lf
+LICENSE  text eol=lf

@@ -1,0 +1,6 @@
+logs/
+*.o
+*.ko
+__pycache__/
+build/
+
