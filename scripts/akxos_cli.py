@@ -22,7 +22,7 @@ from power_model import compute_pdyn, compute_pleak, get_log_file
 def print_banner():
     """Show a consistent banner for all commands."""
     print("\033[96m" + "=" * 60)
-    print("🌀  akxOS v0.1.3 — Power-Aware Process Monitor")
+    print("akxOS v0.1.3 — Power-Aware Process Monitor")
     print("=" * 60 + "\033[0m\n")
 
 

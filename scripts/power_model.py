@@ -15,7 +15,7 @@ from process_info import get_process_stats  # reuse your existing function
 # --- Configurable constants ---
 VOLTAGE = 1.0          # volts (approx for RPi)
 FREQ = 1.5e9           # Hz (1.5 GHz)
-K_DYN = 1e-6           # scaling factor for dynamic power
+K_DYN = 2e-9           # scaling factor for dynamic power
 K_LEAK = 5e-9          # scaling factor for leakage power
 LOG_DIR = "../logs/"   # relative to scripts directory
 
