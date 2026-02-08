@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-akxOS v0.2.1 — sys_telemetry.py
+akxOS sys_telemetry.py
 Reads live voltage, frequency, and temperature from Raspberry Pi 4 /sys.
+
 """
 
 import os

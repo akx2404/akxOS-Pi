@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-akxOS Process Info Parser v0.1.1
+akxOS Process Info Parser
 --------------------------------
 Reads process information from /proc/[pid]/stat and computes:
 - PID
@@ -8,6 +8,7 @@ Reads process information from /proc/[pid]/stat and computes:
 - CPU usage (%)
 - Memory usage (KB)
 Provides data to other akxOS modules (e.g., power_model.py).
+
 """
 
 import os
