@@ -3,6 +3,7 @@
 akxOS CLI
 ---------
 User-facing interface for akxOS functionality.
+Includes power monitoring, logging, and power budgeting.
 
 """
 
@@ -15,8 +16,20 @@ from proc.process_info import get_process_stats
 from power.power_state import get_power_states
 from log.logger import PowerLogger
 
+from budget.budget_engine import BudgetEngine
+from budget.policy import BudgetPolicy
 
-# ---------- Visual Styling ----------
+
+# --------------------------------------------------
+# Global Budget Engine (session-scoped)
+# --------------------------------------------------
+
+budget_engine = BudgetEngine(interval=1.0)
+
+
+# --------------------------------------------------
+# Visual Styling
+# --------------------------------------------------
 
 def print_banner():
     print("\033[96m" + "=" * 75)
@@ -28,7 +41,9 @@ def clear_screen():
     os.system("clear" if os.name == "posix" else "cls")
 
 
-# ---------- Display: Process Table ----------
+# --------------------------------------------------
+# Process Table
+# --------------------------------------------------
 
 def display_ps():
     processes = get_process_stats()
@@ -45,7 +60,9 @@ def display_ps():
         )
 
 
-# ---------- Display: Power Table ----------
+# --------------------------------------------------
+# Power Table
+# --------------------------------------------------
 
 def display_power():
     power_states = get_power_states(core_id=0)
@@ -72,7 +89,9 @@ def display_power():
         )
 
 
-# ---------- Refresh Mode ----------
+# --------------------------------------------------
+# Refresh Mode
+# --------------------------------------------------
 
 def refresh_mode(display_func, interval=1.0):
     try:
@@ -90,32 +109,69 @@ def refresh_mode(display_func, interval=1.0):
         print("\n[akxOS] Live mode stopped.")
 
 
-# ---------- Logging ----------
+# --------------------------------------------------
+# Logging
+# --------------------------------------------------
 
 def cmd_log(interval, duration):
     logger = PowerLogger(interval=interval, duration=duration)
     logger.run()
 
 
-# ---------- CLI Entry ----------
+# --------------------------------------------------
+# CLI Entry
+# --------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="akxOS unified CLI")
     subparsers = parser.add_subparsers(dest="command", help="Subcommands")
 
+    # ---------------- ps ----------------
     ps_parser = subparsers.add_parser("ps", help="Show process table")
     ps_parser.add_argument("-r", "--refresh", action="store_true")
     ps_parser.add_argument("--interval", type=float, default=1.0)
 
+    # ---------------- power ----------------
     power_parser = subparsers.add_parser("power", help="Show power table")
     power_parser.add_argument("-r", "--refresh", action="store_true")
     power_parser.add_argument("--interval", type=float, default=1.0)
 
+    # ---------------- log ----------------
     log_parser = subparsers.add_parser("log", help="Log power over time")
     log_parser.add_argument("--interval", type=float, default=1.0)
     log_parser.add_argument("--duration", type=float, default=10.0)
 
+    # ---------------- budget ----------------
+    budget_parser = subparsers.add_parser(
+        "budget", help="Manage per-process power budgets"
+    )
+    budget_sub = budget_parser.add_subparsers(dest="budget_cmd")
+
+    # budget add
+    add_parser = budget_sub.add_parser("add", help="Add a power budget")
+    add_parser.add_argument("pid", type=int, help="Process ID")
+    add_parser.add_argument("limit_mw", type=float, help="Power limit in mW")
+    add_parser.add_argument(
+        "--mode",
+        choices=["sched_weight", "dvfs_cap", "cpu_quota"],
+        default="sched_weight",
+        help="Enforcement mode",
+    )
+
+    # budget list
+    budget_sub.add_parser("list", help="List active budgets")
+
+    # budget remove
+    remove_parser = budget_sub.add_parser("remove", help="Remove a power budget")
+    remove_parser.add_argument("pid", type=int, help="Process ID")
+
+    # budget run
+    run_parser = budget_sub.add_parser("run", help="Run budget enforcement engine")
+    run_parser.add_argument("--duration", type=float, default=None)
+
     args = parser.parse_args()
+
+    # ---------------- Dispatch ----------------
 
     if args.command == "ps":
         refresh_mode(display_ps, args.interval) if args.refresh else display_ps()
@@ -125,6 +181,28 @@ def main():
 
     elif args.command == "log":
         cmd_log(args.interval, args.duration)
+
+    elif args.command == "budget":
+
+        if args.budget_cmd == "add":
+            policy = BudgetPolicy(
+                pid=args.pid,
+                power_limit_mw=args.limit_mw,
+                mode=args.mode,
+            )
+            budget_engine.add_policy(policy)
+
+        elif args.budget_cmd == "list":
+            budget_engine.list_policies()
+
+        elif args.budget_cmd == "remove":
+            budget_engine.remove_policy(args.pid)
+
+        elif args.budget_cmd == "run":
+            budget_engine.run(duration=args.duration)
+
+        else:
+            budget_parser.print_help()
 
     else:
         parser.print_help()
