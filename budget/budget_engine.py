@@ -172,26 +172,57 @@ class BudgetEngine:
 
             if violated:
                 policy.violation_count += 1
-                self._apply_enforcement(pid, policy)
+                self._apply_enforcement(pid, policy, power_map[pid])
             else:
-                self._relax_enforcement(pid, policy)
+                self._apply_enforcement(pid, policy, power_map[pid])
 
     # =================================================
     # Enforcement Logic
     # =================================================
 
-    def _apply_enforcement(self, pid: int, policy: BudgetPolicy):
+    def _apply_enforcement(self, pid: int, policy: BudgetPolicy, current_state):
         if self.enforced.get(pid, False):
             return
 
         if policy.mode == "sched_weight":
-            apply_nice(pid)
+          apply_nice(pid)
 
         elif policy.mode == "dvfs_cap":
-            apply_freq_cap(600000)
+          apply_freq_cap(600000)
 
         elif policy.mode == "cpu_quota":
-            apply_cgroup_quota(pid, 20000)
+
+          # Get latest measurement
+          power_states = get_power_states()
+          power_map = {ps["pid"]: ps for ps in power_states}
+
+          if pid not in power_map:
+              return
+
+          current_power = current_state["p_total_mw"]
+          current_cpu = current_state["cpu_percent"]
+
+          if current_power <= 0:
+              return
+
+          # Proportional scaling
+          target_cpu = (
+              policy.power_limit_mw / current_power
+          ) * current_cpu
+
+          # Clamp CPU% between 5% and 100%
+          target_cpu = max(5.0, min(target_cpu, 100.0))
+
+          period_us = 100000
+          quota_us = int(period_us * target_cpu / 100)
+
+          print(
+              f"[akxOS][quota] PID {pid}: "
+              f"{current_cpu:.1f}% → {target_cpu:.1f}% "
+              f"(quota {quota_us}/{period_us})"
+          )
+
+          apply_cgroup_quota(pid, quota_us, period_us)
 
         self.enforced[pid] = True
 
