@@ -1,51 +1,170 @@
 #!/usr/bin/env python3
 """
-akxOS Budget Policy
--------------------
-Defines power budget intent for a process.
-
-Policy describes:
-- WHAT the limit is
-- WHICH OS control plane is used
+akxOS Enforcement Mechanisms
+----------------------------
+User-space enforcement primitives for power budgeting.
 
 """
 
-from dataclasses import dataclass
-from typing import Literal
+import os
+from pathlib import Path
 
 
-EnforcementMode = Literal[
-    "sched_weight",
-    "dvfs_cap",
-    "cpu_quota"
-]
+# ==========================================================
+# Utility Helpers
+# ==========================================================
+
+def _warn(msg: str):
+    print(f"[akxOS][enforcer] {msg}")
 
 
-@dataclass
-class BudgetPolicy:
-    pid: int
-    power_limit_mw: float
-    mode: EnforcementMode
+def _pid_exists(pid: int) -> bool:
+    return Path(f"/proc/{pid}").exists()
 
-    window_size: int = 5
-    violation_count: int = 0
-    active: bool = True
 
-    def __post_init__(self):
-        if self.power_limit_mw <= 0:
-            raise ValueError("Power limit must be positive")
+# ==========================================================
+# 1️⃣ Scheduler Weight (nice)
+# ==========================================================
 
-        if self.window_size < 1:
-            raise ValueError("Window size must be >= 1")
+def apply_nice(pid: int, nice_value: int = 10):
+    """
+    Apply scheduler priority shaping using nice().
 
-        if self.mode not in ("sched_weight", "dvfs_cap", "cpu_quota"):
-            raise ValueError(f"Invalid enforcement mode: {self.mode}")
+    Higher nice_value → lower scheduling priority.
+    """
+    if not _pid_exists(pid):
+        _warn(f"PID {pid} not found.")
+        return
 
-    def __str__(self):
-        return (
-            f"PID={self.pid} | "
-            f"Limit={self.power_limit_mw}mW | "
-            f"Mode={self.mode} | "
-            f"Window={self.window_size} | "
-            f"Violations={self.violation_count}"
+    try:
+        os.setpriority(os.PRIO_PROCESS, pid, nice_value)
+        print(f"[akxOS] Applied nice={nice_value} to PID {pid}")
+    except PermissionError:
+        _warn("Permission denied. Try running with sudo.")
+    except Exception as e:
+        _warn(f"apply_nice failed: {e}")
+
+
+def reset_nice(pid: int):
+    """
+    Reset nice value to default (0).
+    """
+    try:
+        os.setpriority(os.PRIO_PROCESS, pid, 0)
+        print(f"[akxOS] Reset nice for PID {pid}")
+    except Exception:
+        pass
+
+
+# ==========================================================
+# 2️⃣ DVFS Frequency Cap
+# ==========================================================
+
+CPU_SYS_PATH = Path("/sys/devices/system/cpu")
+
+
+def _cpu_list():
+    return sorted(
+        p for p in CPU_SYS_PATH.glob("cpu[0-9]*")
+        if p.is_dir()
+    )
+
+
+def apply_freq_cap(freq_khz: int):
+    """
+    Apply max frequency cap across all CPU cores.
+    """
+    try:
+        for cpu in _cpu_list():
+            path = cpu / "cpufreq" / "scaling_max_freq"
+            if path.exists():
+                path.write_text(str(freq_khz))
+
+        print(f"[akxOS] Applied frequency cap: {freq_khz} kHz")
+
+    except PermissionError:
+        _warn("Permission denied. DVFS requires sudo.")
+    except Exception as e:
+        _warn(f"apply_freq_cap failed: {e}")
+
+
+def reset_freq_cap():
+    """
+    Reset max frequency to hardware maximum.
+    """
+    try:
+        for cpu in _cpu_list():
+            max_path = cpu / "cpufreq" / "cpuinfo_max_freq"
+            scale_path = cpu / "cpufreq" / "scaling_max_freq"
+
+            if max_path.exists() and scale_path.exists():
+                max_freq = max_path.read_text().strip()
+                scale_path.write_text(max_freq)
+
+        print("[akxOS] Reset frequency cap to hardware maximum")
+
+    except Exception:
+        pass
+
+
+# ==========================================================
+# 3️⃣ CPU Quota (cgroups v2)
+# ==========================================================
+
+CGROUP_ROOT = Path("/sys/fs/cgroup")
+AKXOS_GROUP = CGROUP_ROOT / "akxos_budget"
+
+
+def _ensure_cgroup():
+    try:
+        if not AKXOS_GROUP.exists():
+            AKXOS_GROUP.mkdir()
+        return True
+    except PermissionError:
+        _warn("Permission denied creating cgroup. Requires sudo.")
+        return False
+
+
+def apply_cgroup_quota(pid: int, quota_us: int, period_us: int = 100000):
+
+    if not _pid_exists(pid):
+        _warn(f"PID {pid} not found.")
+        return
+
+    group_path = CGROUP_ROOT / f"akxos_{pid}"
+
+    try:
+        group_path.mkdir(exist_ok=True)
+
+        cpu_max = group_path / "cpu.max"
+        procs = group_path / "cgroup.procs"
+
+        cpu_max.write_text(f"{quota_us} {period_us}")
+        procs.write_text(str(pid))
+
+        print(
+            f"[akxOS] Applied CPU quota to PID {pid} "
+            f"({quota_us}/{period_us} µs)"
         )
+
+    except Exception as e:
+        _warn(f"apply_cgroup_quota failed: {e}")
+
+
+def reset_cgroup(pid: int):
+
+    group_path = CGROUP_ROOT / f"akxos_{pid}"
+
+    try:
+        # Move process back to root
+        root_procs = CGROUP_ROOT / "cgroup.procs"
+        root_procs.write_text(str(pid))
+
+        # Remove group directory
+        if group_path.exists():
+            group_path.rmdir()
+
+        print(f"[akxOS] Reset cgroup for PID {pid}")
+
+    except Exception:
+        pass
