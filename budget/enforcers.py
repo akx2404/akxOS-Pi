@@ -126,22 +126,18 @@ def _ensure_cgroup():
 
 
 def apply_cgroup_quota(pid: int, quota_us: int, period_us: int = 100000):
-    """
-    Apply CPU quota using cgroups v2.
 
-    quota_us  : allowed microseconds per period
-    period_us : scheduling period (default 100ms)
-    """
     if not _pid_exists(pid):
         _warn(f"PID {pid} not found.")
         return
 
-    if not _ensure_cgroup():
-        return
+    group_path = CGROUP_ROOT / f"akxos_{pid}"
 
     try:
-        cpu_max = AKXOS_GROUP / "cpu.max"
-        procs = AKXOS_GROUP / "cgroup.procs"
+        group_path.mkdir(exist_ok=True)
+
+        cpu_max = group_path / "cpu.max"
+        procs = group_path / "cgroup.procs"
 
         cpu_max.write_text(f"{quota_us} {period_us}")
         procs.write_text(str(pid))
@@ -156,12 +152,19 @@ def apply_cgroup_quota(pid: int, quota_us: int, period_us: int = 100000):
 
 
 def reset_cgroup(pid: int):
-    """
-    Move process back to root cgroup.
-    """
+
+    group_path = CGROUP_ROOT / f"akxos_{pid}"
+
     try:
+        # Move process back to root
         root_procs = CGROUP_ROOT / "cgroup.procs"
         root_procs.write_text(str(pid))
+
+        # Remove group directory
+        if group_path.exists():
+            group_path.rmdir()
+
         print(f"[akxOS] Reset cgroup for PID {pid}")
+
     except Exception:
         pass
