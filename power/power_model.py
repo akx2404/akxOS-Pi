@@ -67,10 +67,11 @@ def compute_leakage_power(mem_kb: int,
         Leakage power in milliwatts
     """
 
-    mv = mem_kb * voltage_v
+    mem_mb = mem_kb / 1024.0
+    mv = mem_mb * voltage_v
 
     if model == "linear":
-        p_leak_w = K_LEAK * mv
+        p_leak_w = K_LEAK * mem_kb * voltage_v
 
     elif model == "quadratic":
         p_leak_w = (
@@ -81,4 +82,4 @@ def compute_leakage_power(mem_kb: int,
     else:
         raise ValueError(f"Unknown leakage model: {model}")
 
-    return p_leak_w * 1e3  # W → mW
+    return p_leak_w * 1e3
