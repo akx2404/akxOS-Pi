@@ -8,4 +8,4 @@ K_LEAK = 5e-9
 
 LEAK_LINEAR_A = 0.002   # proportional factor (tune experimentally)
 LEAK_QUAD_A = 1e-6
-LEAK_QUAD_B = 1e-7
+LEAK_QUAD_B = 0.02

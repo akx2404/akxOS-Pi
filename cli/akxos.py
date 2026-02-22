@@ -87,39 +87,25 @@ def display_power(leak_model="linear", compare=False):
     )[:10]
 
     if compare:
+      models = ["linear", "quadratic", "exponential"]
+      results = {
+          m: get_power_states(core_id=0, leak_model=m)
+          for m in models
+      }
 
-        print(
-            f"{'PID':<8}{'Name':<20}"
-            f"{'Linear(mW)':<15}{'Quad(mW)':<15}"
-            f"{'%Diff':<10}"
-        )
-        print("-" * 70)
+      print(f"{'PID':<6}{'Linear':<12}{'Quad':<12}{'Exp':<12}")
 
-        for ps in base_states:
+      for i in range(len(results["linear"])):
+          l = results["linear"][i]
+          q = results["quadratic"][i]
+          e = results["exponential"][i]
 
-            # Compute quadratic leakage using same telemetry snapshot
-            quad_leak = compute_leakage_power(
-                mem_kb=ps["mem_kb"],
-                voltage_v=ps["voltage_v"],
-                model="quadratic",
-            )
+          print(f"{l['pid']:<6}"
+                f"{l['p_leak_mw']:<12.3f}"
+                f"{q['p_leak_mw']:<12.3f}"
+                f"{e['p_leak_mw']:<12.3f}")
 
-            linear_leak = ps["p_leak_mw"]
-
-            diff = (
-                (quad_leak - linear_leak) /
-                max(linear_leak, 1e-6)
-            ) * 100
-
-            print(
-                f"{ps['pid']:<8}"
-                f"{ps['name']:<20}"
-                f"{linear_leak:<15.2f}"
-                f"{quad_leak:<15.2f}"
-                f"{diff:<10.2f}"
-            )
-
-        return
+          return
 
     # Recompute if user selected quadratic
     if leak_model == "quadratic":
@@ -163,7 +149,7 @@ def refresh_mode(display_func, interval=1.0):
             clear_screen()
             print_banner()
             print(
-                f"⏱️  Live Mode — Interval: {interval:.1f}s — "
+                f"Live Mode — Interval: {interval:.1f}s — "
                 f"{datetime.now().strftime('%H:%M:%S')}\n"
             )
             display_func()
@@ -201,9 +187,8 @@ def main():
     power_parser.add_argument("--interval", type=float, default=1.0)
     power_parser.add_argument(
     "--leak-model",
-    choices=["linear", "quadratic"],
-    default="linear",
-    help="Select leakage power model")
+    choices=["linear", "quadratic", "exponential"],
+    default="linear" )
     power_parser.add_argument(
     "--compare-models",
     action="store_true",
