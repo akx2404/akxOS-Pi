@@ -6,98 +6,96 @@ from datetime import datetime
 from power.power_state import get_power_states
 
 LOG_INTERVAL = 0.5
+BUDGET_VALUE = "80"
 
 
-def run_experiment(mode_name: str,
-                   output_csv: str,
-                   core_id: int = 0):
+def apply_budget(pid, mode):
+    subprocess.run([
+        "sudo", "akxos", "budget", "add",
+        str(pid),
+        BUDGET_VALUE,
+        "--mode", mode
+    ])
+
+def start_budget_runner():
+    return subprocess.Popen(
+        ["sudo", "akxos", "budget", "run"]
+    )
+
+def stop_budget_runner(proc):
+    proc.terminate()
+    proc.wait()
+
+def reset_budget(pid):
+    subprocess.run([
+        "sudo", "akxos", "budget",
+        "remove", str(pid)
+    ])
+
+
+def run_single(mode_name, core_id=0):
 
     print(f"\n=== Running Mode: {mode_name} ===")
 
-    proc = subprocess.Popen(["python3", "tests/fixed_workload.py"])
-    pid = proc.pid
+    workload = subprocess.Popen(["python3", "tests/fixed_workload.py"])
+    pid = workload.pid
 
-    print(f"Workload PID: {pid}")
+    print(f"PID: {pid}")
+
+    budget_runner = None
+
+    if mode_name != "baseline":
+        time.sleep(0.5)
+        apply_budget(pid, mode_name)
+        budget_runner = start_budget_runner()
 
     samples = []
-
     start_time = time.time()
     last_sample_time = start_time
 
-    # Give 1 second warmup for stable CPU% measurement
     time.sleep(1)
 
-    while proc.poll() is None:
+    while workload.poll() is None:
         current_time = time.time()
         delta_t = current_time - last_sample_time
 
         states = get_power_states(core_id=core_id)
+        state = next((p for p in states if p["pid"] == pid), None)
 
-        stress_state = next(
-            (p for p in states if p["pid"] == pid),
-            None
-        )
-
-        if stress_state:
+        if state:
             samples.append({
-                "time": current_time - start_time,
                 "delta_t": delta_t,
-                "cpu_percent": stress_state["cpu_percent"],
-                "freq_hz": stress_state["freq_hz"],
-                "temp_c": stress_state["temperature_c"],
-                "p_dyn_mw": stress_state["p_dyn_mw"],
-                "p_leak_mw": stress_state["p_leak_mw"],
-                "p_total_mw": stress_state["p_total_mw"],
+                "p_total_mw": state["p_total_mw"]
             })
 
         last_sample_time = current_time
         time.sleep(LOG_INTERVAL)
 
-    end_time = time.time()
-    runtime = end_time - start_time
+    runtime = time.time() - start_time
+    energy = sum(s["p_total_mw"] * s["delta_t"] for s in samples)
 
     print(f"Runtime: {runtime:.2f} sec")
+    print(f"Energy: {energy:.2f}")
 
-    # --- Energy Integration using real delta_t ---
-    energy = sum(s["p_total_mw"] * s["delta_t"] for s in samples)
-    avg_power = energy / runtime if runtime > 0 else 0
+    if budget_runner:
+        stop_budget_runner(budget_runner)
 
-    print(f"Energy Proxy (mW·s): {energy:.2f}")
-    print(f"Average Power (mW): {avg_power:.2f}")
+    print("Cooling down 30 sec...")
+    time.sleep(30)
 
-    # --- Save CSV ---
-    with open(output_csv, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([
-            "time_s",
-            "delta_t",
-            "cpu_percent",
-            "freq_hz",
-            "temp_c",
-            "p_dyn_mw",
-            "p_leak_mw",
-            "p_total_mw",
-        ])
-        for s in samples:
-            writer.writerow([
-                s["time"],
-                s["delta_t"],
-                s["cpu_percent"],
-                s["freq_hz"],
-                s["temp_c"],
-                s["p_dyn_mw"],
-                s["p_leak_mw"],
-                s["p_total_mw"],
-            ])
+    return runtime, energy
 
-    print(f"Saved log to {output_csv}")
-
-    return runtime, energy, avg_power
 
 if __name__ == "__main__":
 
-    mode = "baseline"  # change per run
-    output_file = f"{mode}_{datetime.now().strftime('%H%M%S')}.csv"
+    modes = ["baseline", "cpu_quota", "dvfs_cap"]
 
-    run_experiment(mode_name=mode, output_csv=output_file)
+    results = []
 
+    for mode in modes:
+        runtime, energy = run_single(mode)
+        results.append((mode, runtime, energy))
+
+    print("\n=== Summary ===")
+    for r in results:
+        print(r)

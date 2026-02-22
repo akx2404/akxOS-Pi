@@ -9,7 +9,7 @@ def is_prime(n):
     return True
 
 count = 0
-target = 3000000  # Adjust for ~20 sec runtime on Pi
+target = 1000000  # Adjust for ~20 sec runtime on Pi
 
 for num in range(2, target):
     is_prime(num)
