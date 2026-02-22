@@ -64,56 +64,65 @@ def display_ps():
 # Power Table
 # --------------------------------------------------
 
+from power.power_model import compute_leakage_power
+
 def display_power(leak_model="linear", compare=False):
-    """
-    Display power table.
 
-    Parameters
-    ----------
-    leak_model : str
-        'linear' or 'quadratic'
-    compare : bool
-        If True, compares both leakage models side-by-side
-    """
+    # ------------------------------
+    # Get baseline snapshot (linear)
+    # ------------------------------
+    base_states = get_power_states(core_id=0, leak_model="linear")
 
-    base_states = get_power_states(core_id=0,
-                                   leak_model="linear")
-
-    # Sort once for consistency
+    # Sort by CPU%
     base_states = sorted(
         base_states,
         key=lambda x: x["cpu_percent"],
         reverse=True
     )[:10]
 
+    # ==================================================
+    # COMPARE MODE (Linear vs Quad vs Exp)
+    # ==================================================
     if compare:
-      models = ["linear", "quadratic", "exponential"]
-      results = {
-          m: get_power_states(core_id=0, leak_model=m)
-          for m in models
-      }
 
-      print(f"{'PID':<6}{'Linear':<12}{'Quad':<12}{'Exp':<12}")
+        print(
+            f"{'PID':<6}{'Name':<18}"
+            f"{'Linear(mW)':<14}"
+            f"{'Quad(mW)':<14}"
+            f"{'Exp(mW)':<14}"
+        )
+        print("-" * 70)
 
-      for i in range(len(results["linear"])):
-          l = results["linear"][i]
-          q = results["quadratic"][i]
-          e = results["exponential"][i]
+        for ps in base_states:
 
-          print(f"{l['pid']:<6}"
-                f"{l['p_leak_mw']:<12.3f}"
-                f"{q['p_leak_mw']:<12.3f}"
-                f"{e['p_leak_mw']:<12.3f}")
+            mem = ps["mem_kb"]
+            V = ps["voltage_v"]
 
-          return
+            linear = compute_leakage_power(mem, V, "linear")
+            quad   = compute_leakage_power(mem, V, "quadratic")
+            exp    = compute_leakage_power(mem, V, "exponential")
 
-    # Recompute if user selected quadratic
-    if leak_model == "quadratic":
+            print(
+                f"{ps['pid']:<6}"
+                f"{ps['name']:<18}"
+                f"{linear:<14.4f}"
+                f"{quad:<14.4f}"
+                f"{exp:<14.4f}"
+            )
+
+        return
+
+    # ==================================================
+    # NORMAL MODE
+    # ==================================================
+
+    # Recompute leakage if not linear
+    if leak_model != "linear":
         for ps in base_states:
             ps["p_leak_mw"] = compute_leakage_power(
-                mem_kb=ps["mem_kb"],
-                voltage_v=ps["voltage_v"],
-                model="quadratic",
+                ps["mem_kb"],
+                ps["voltage_v"],
+                leak_model
             )
             ps["p_total_mw"] = ps["p_dyn_mw"] + ps["p_leak_mw"]
 
@@ -134,7 +143,7 @@ def display_power(leak_model="linear", compare=False):
             f"{ps['freq_hz'] / 1e6:<9.0f}"
             f"{ps['temperature_c']:<8.1f}"
             f"{ps['p_dyn_mw']:<12.2f}"
-            f"{ps['p_leak_mw']:<12.2f}"
+            f"{ps['p_leak_mw']:<12.4f}"
             f"{ps['p_total_mw']:<12.2f}"
         )
 

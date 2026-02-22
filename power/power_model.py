@@ -6,13 +6,15 @@ Pure power modeling equations.
 
 """
 
+import math
+
 from power.constants import (
     ALPHA,
     C_EFF,
     K_LEAK,
     LEAK_LINEAR_A,
-    LEAK_QUAD_A,
     LEAK_QUAD_B,
+    LEAK_EXP_B,
     V_NOM,
 )
 
@@ -53,18 +55,18 @@ def compute_leakage_power(mem_kb, voltage_v, model):
     V = voltage_v
 
     if model == "linear":
-        return A_LINEAR * M * V
+        return LEAK_LINEAR_A * M * V
 
     elif model == "quadratic":
         return (
-            A_LINEAR * M * V +
-            B_QUAD * M * (V - V_NOM) ** 2
+            LEAK_LINEAR_A * M * V +
+            LEAK_QUAD_B * M * (V - V_NOM) ** 2
         )
 
     elif model == "exponential":
         return (
-            A_LINEAR * M *
-            math.exp(B_EXP * (V - V_NOM))
+            LEAK_LINEAR_A * M *
+            math.exp(LEAK_EXP_B * (V - V_NOM))
         )
 
     else:

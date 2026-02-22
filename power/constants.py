@@ -6,8 +6,7 @@ K_LEAK = 5e-9
 
 # Leakage model coefficients
 
-LEAK_LINEAR_A = 0.002   # proportional factor (tune experimentally)
-LEAK_QUAD_A = 1e-6
+LEAK_LINEAR_A = 0.002
 LEAK_QUAD_B = 0.005
 V_NOM = 0.90
-B_EXP = 2.0
+LEAK_EXP_B = 2.0
