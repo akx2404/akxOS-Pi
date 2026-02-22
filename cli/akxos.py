@@ -14,11 +14,11 @@ from datetime import datetime
 
 from proc.process_info import get_process_stats
 from power.power_state import get_power_states
+from power.power_model import compute_leakage_power
 from log.logger import PowerLogger
 
 from budget.budget_engine import BudgetEngine
 from budget.policy import BudgetPolicy
-
 
 # --------------------------------------------------
 # Global Budget Engine (session-scoped)
@@ -64,28 +64,92 @@ def display_ps():
 # Power Table
 # --------------------------------------------------
 
-def display_power():
-    power_states = get_power_states(core_id=0)
+from power.power_model import compute_leakage_power
+
+def display_power(leak_model="linear", compare=False):
+
+    # ------------------------------
+    # Get baseline snapshot (linear)
+    # ------------------------------
+    base_states = get_power_states(core_id=0, leak_model="linear")
+
+    # Sort by CPU%
+    base_states = sorted(
+        base_states,
+        key=lambda x: x["cpu_percent"],
+        reverse=True
+    )[:10]
+
+    # ==================================================
+    # COMPARE MODE (Linear vs Quad vs Exp)
+    # ==================================================
+    if compare:
+
+        print(
+            f"{'PID':<6}{'Name':<18}"
+            f"{'Linear(mW)':<14}"
+            f"{'Quad(mW)':<14}"
+            f"{'Exp(mW)':<14}"
+        )
+        print("-" * 70)
+
+        for ps in base_states:
+
+            mem = ps["mem_kb"]
+            V = ps["voltage_v"]
+
+            linear = compute_leakage_power(mem, V, "linear")
+            quad   = compute_leakage_power(mem, V, "quadratic")
+            exp    = compute_leakage_power(mem, V, "exponential")
+
+            S = (exp - linear) / max(linear, 1e-6)
+
+            print(
+                f"{ps['pid']:<6}"
+                f"{ps['name']:<18}"
+                f"{linear:<14.4f}"
+                f"{quad:<14.4f}"
+                f"{exp:<14.4f}"
+                f"{S:<10.3f}"
+            )
+
+        return
+
+    # ==================================================
+    # NORMAL MODE
+    # ==================================================
 
     print(
-        f"{'PID':<8}{'Name':<20}{'CPU%':<8}{'Mem(KB)':<9}"
-        f"{'V(V)':<7}{'f(MHz)':<9}{'T(°C)':<8}"
-        f"{'Pdyn(mW)':<12}{'Pleak(mW)':<12}{'Ptotal(mW)':<12}"
+    f"{'PID':<6}{'Name':<18}"
+    f"{'CPU%':<7}"
+    f"{'Pdyn':<10}"
+    f"{'Pleak':<10}"
+    f"{'Ptot':<10}"
+    f"{'R(L/D)':<10}"
+    f"{'I(mW/%)':<12}"
     )
-    print("-" * 115)
+    print("-" * 90)
 
-    for ps in sorted(power_states, key=lambda x: x["cpu_percent"], reverse=True)[:10]:
+    for ps in base_states:
+
+        Pdyn = ps["p_dyn_mw"]
+        Pleak = ps["p_leak_mw"]
+        Ptot = ps["p_total_mw"]
+        cpu = max(ps["cpu_percent"], 0.01)
+
+        # ---- Derived Metrics ----
+        R = Pleak / max(Pdyn, 1e-6)
+        I = Ptot / cpu
+
         print(
-            f"{ps['pid']:<8}"
-            f"{ps['name']:<20}"
-            f"{ps['cpu_percent']:<8.2f}"
-            f"{ps['mem_kb']:<9}"
-            f"{ps['voltage_v']:<7.2f}"
-            f"{ps['freq_hz'] / 1e6:<9.0f}"
-            f"{ps['temperature_c']:<8.1f}"
-            f"{ps['p_dyn_mw']:<12.2f}"
-            f"{ps['p_leak_mw']:<12.2f}"
-            f"{ps['p_total_mw']:<12.2f}"
+            f"{ps['pid']:<6}"
+            f"{ps['name']:<18}"
+            f"{cpu:<7.2f}"
+            f"{Pdyn:<10.2f}"
+            f"{Pleak:<10.4f}"
+            f"{Ptot:<10.2f}"
+            f"{R:<10.3f}"
+            f"{I:<12.3f}"
         )
 
 
@@ -99,7 +163,7 @@ def refresh_mode(display_func, interval=1.0):
             clear_screen()
             print_banner()
             print(
-                f"⏱️  Live Mode — Interval: {interval:.1f}s — "
+                f"Live Mode — Interval: {interval:.1f}s — "
                 f"{datetime.now().strftime('%H:%M:%S')}\n"
             )
             display_func()
@@ -135,6 +199,14 @@ def main():
     power_parser = subparsers.add_parser("power", help="Show power table")
     power_parser.add_argument("-r", "--refresh", action="store_true")
     power_parser.add_argument("--interval", type=float, default=1.0)
+    power_parser.add_argument(
+    "--leak-model",
+    choices=["linear", "quadratic", "exponential"],
+    default="linear" )
+    power_parser.add_argument(
+    "--compare-models",
+    action="store_true",
+    help="Compare linear and quadratic leakage models" )
 
     # ---------------- log ----------------
     log_parser = subparsers.add_parser("log", help="Log power over time")
@@ -177,7 +249,19 @@ def main():
         refresh_mode(display_ps, args.interval) if args.refresh else display_ps()
 
     elif args.command == "power":
-        refresh_mode(display_power, args.interval) if args.refresh else display_power()
+      if args.refresh:
+          refresh_mode(
+              lambda: display_power(
+                  leak_model=args.leak_model,
+                  compare=args.compare_models
+              ),
+              args.interval
+          )
+      else:
+          display_power(
+              leak_model=args.leak_model,
+              compare=args.compare_models
+          )
 
     elif args.command == "log":
         cmd_log(args.interval, args.duration)
