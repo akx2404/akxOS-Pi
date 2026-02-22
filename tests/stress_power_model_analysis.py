@@ -14,7 +14,7 @@ def run_experiment(mode_name: str,
 
     print(f"\n=== Running Mode: {mode_name} ===")
 
-    proc = subprocess.Popen(["python3", "fixed_workload.py"])
+    proc = subprocess.Popen(["python3", "tests/fixed_workload.py"])
     pid = proc.pid
 
     print(f"Workload PID: {pid}")
@@ -93,3 +93,11 @@ def run_experiment(mode_name: str,
     print(f"Saved log to {output_csv}")
 
     return runtime, energy, avg_power
+
+if __name__ == "__main__":
+
+    mode = "baseline"  # change per run
+    output_file = f"{mode}_{datetime.now().strftime('%H%M%S')}.csv"
+
+    run_experiment(mode_name=mode, output_csv=output_file)
+
