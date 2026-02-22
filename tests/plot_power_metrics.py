@@ -1,13 +1,16 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
-# Replace with real measured averages
+output_dir = 'tests/plots'
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
+
 loads = ["Idle", "Medium", "Heavy"]
 
-# Example data (replace with your logs)
-R_vals = [0.9, 0.2, 0.05]
-I_vals = [5.1, 6.8, 8.2]
-S_vals = [0.02, 0.08, 0.15]
+R_vals = [0.0010, 0.0005, 0.0003]
+I_vals = [5.85, 5.85, 5.85]
+S_vals = [0.16, 0.16, 0.16]
 
 x = np.arange(len(loads))
 
@@ -17,7 +20,7 @@ plt.title("Leak/Dyn Ratio vs Load")
 plt.ylabel("R (Pleak / Pdyn)")
 plt.grid(True)
 plt.tight_layout()
-plt.savefig("ratio_plot.png", dpi=300)
+plt.savefig(os.path.join(output_dir,"ratio_plot.png"), dpi=300)
 plt.show()
 
 plt.figure(figsize=(8,5))
@@ -26,7 +29,7 @@ plt.title("Power Intensity vs Load")
 plt.ylabel("I (mW per CPU%)")
 plt.grid(True)
 plt.tight_layout()
-plt.savefig("intensity_plot.png", dpi=300)
+plt.savefig(os.path.join(output_dir,"intensity_plot.png"), dpi=300)
 plt.show()
 
 plt.figure(figsize=(8,5))
@@ -35,5 +38,5 @@ plt.title("Leakage Sensitivity Index vs Load")
 plt.ylabel("S (Exp - Linear)/Linear")
 plt.grid(True)
 plt.tight_layout()
-plt.savefig("sensitivity_plot.png", dpi=300)
+plt.savefig(os.path.join(output_dir,"sensitivity_plot.png"), dpi=300)
 plt.show()
