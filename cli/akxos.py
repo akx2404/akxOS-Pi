@@ -230,10 +230,6 @@ def main():
         default="sched_weight",
         help="Enforcement mode",
     )
-    power_parser.add_argument(
-    "--compare-models",
-    action="store_true",
-    help="Compare linear and quadratic leakage models" )
 
     # budget list
     budget_sub.add_parser("list", help="List active budgets")
