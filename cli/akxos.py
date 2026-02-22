@@ -102,12 +102,15 @@ def display_power(leak_model="linear", compare=False):
             quad   = compute_leakage_power(mem, V, "quadratic")
             exp    = compute_leakage_power(mem, V, "exponential")
 
+            S = (exp - linear) / max(linear, 1e-6)
+
             print(
                 f"{ps['pid']:<6}"
                 f"{ps['name']:<18}"
                 f"{linear:<14.4f}"
                 f"{quad:<14.4f}"
                 f"{exp:<14.4f}"
+                f"{S:<10.3f}"
             )
 
         return
@@ -116,35 +119,37 @@ def display_power(leak_model="linear", compare=False):
     # NORMAL MODE
     # ==================================================
 
-    # Recompute leakage if not linear
-    if leak_model != "linear":
-        for ps in base_states:
-            ps["p_leak_mw"] = compute_leakage_power(
-                ps["mem_kb"],
-                ps["voltage_v"],
-                leak_model
-            )
-            ps["p_total_mw"] = ps["p_dyn_mw"] + ps["p_leak_mw"]
-
     print(
-        f"{'PID':<8}{'Name':<20}{'CPU%':<8}{'Mem(KB)':<9}"
-        f"{'V(V)':<7}{'f(MHz)':<9}{'T(°C)':<8}"
-        f"{'Pdyn(mW)':<12}{'Pleak(mW)':<12}{'Ptotal(mW)':<12}"
+    f"{'PID':<6}{'Name':<18}"
+    f"{'CPU%':<7}"
+    f"{'Pdyn':<10}"
+    f"{'Pleak':<10}"
+    f"{'Ptot':<10}"
+    f"{'R(L/D)':<10}"
+    f"{'I(mW/%)':<12}"
     )
-    print("-" * 115)
+    print("-" * 90)
 
     for ps in base_states:
+
+        Pdyn = ps["p_dyn_mw"]
+        Pleak = ps["p_leak_mw"]
+        Ptot = ps["p_total_mw"]
+        cpu = max(ps["cpu_percent"], 0.01)
+
+        # ---- Derived Metrics ----
+        R = Pleak / max(Pdyn, 1e-6)
+        I = Ptot / cpu
+
         print(
-            f"{ps['pid']:<8}"
-            f"{ps['name']:<20}"
-            f"{ps['cpu_percent']:<8.2f}"
-            f"{ps['mem_kb']:<9}"
-            f"{ps['voltage_v']:<7.2f}"
-            f"{ps['freq_hz'] / 1e6:<9.0f}"
-            f"{ps['temperature_c']:<8.1f}"
-            f"{ps['p_dyn_mw']:<12.2f}"
-            f"{ps['p_leak_mw']:<12.4f}"
-            f"{ps['p_total_mw']:<12.2f}"
+            f"{ps['pid']:<6}"
+            f"{ps['name']:<18}"
+            f"{cpu:<7.2f}"
+            f"{Pdyn:<10.2f}"
+            f"{Pleak:<10.4f}"
+            f"{Ptot:<10.2f}"
+            f"{R:<10.3f}"
+            f"{I:<12.3f}"
         )
 
 
