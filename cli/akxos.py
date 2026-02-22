@@ -4,7 +4,6 @@ akxOS CLI
 ---------
 User-facing interface for akxOS functionality.
 Includes power monitoring, logging, and power budgeting.
-
 """
 
 import argparse
