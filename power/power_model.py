@@ -13,6 +13,7 @@ from power.constants import (
     LEAK_LINEAR_A,
     LEAK_QUAD_A,
     LEAK_QUAD_B,
+    V_NOM,
 )
 
 
@@ -42,41 +43,29 @@ def compute_dynamic_power(voltage_v: float,
     return p_dyn_w * 1e3  # W → mW
 
 
-def compute_leakage_power(mem_kb: int,
-                          voltage_v: float,
-                          model: str = "linear") -> float:
+def compute_leakage_power(mem_kb, voltage_v, model):
     """
-    Compute leakage power in milliwatts.
-
-    Models:
-        linear     : K_LEAK * mem_kb * voltage
-        quadratic  : a*(mem_kb*V) + b*(mem_kb*V)^2
-
-    Parameters
-    ----------
-    mem_kb : int
-        Resident memory in kilobytes
-    voltage_v : float
-        Supply voltage in Volts
-    model : str
-        Leakage model ("linear" or "quadratic")
-
-    Returns
-    -------
-    float
-        Leakage power in milliwatts
+    Compute leakage power (in mW)
     """
+
+    # Workload proxy (normalize memory usage)
+    M = max(mem_kb / 1024.0, 0.001)
+    V = voltage_v
 
     if model == "linear":
-        return a * M * V
+        return A_LINEAR * M * V
 
     elif model == "quadratic":
-        # tuned quadratic (centered around nominal voltage)
-        return a * M * V + b_quad * M * (V - 0.9) ** 2
+        return (
+            A_LINEAR * M * V +
+            B_QUAD * M * (V - V_NOM) ** 2
+        )
 
     elif model == "exponential":
-        # exponential sensitivity
-        return a * M * math.exp(b_exp * (V - V_nom))
+        return (
+            A_LINEAR * M *
+            math.exp(B_EXP * (V - V_NOM))
+        )
 
     else:
-        raise ValueError("Unknown leakage model")
+        raise ValueError(f"Unknown leakage model: {model}")
