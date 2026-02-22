@@ -14,11 +14,11 @@ from datetime import datetime
 
 from proc.process_info import get_process_stats
 from power.power_state import get_power_states
+from power.power_model import compute_leakage_power
 from log.logger import PowerLogger
 
 from budget.budget_engine import BudgetEngine
 from budget.policy import BudgetPolicy
-
 
 # --------------------------------------------------
 # Global Budget Engine (session-scoped)
@@ -64,8 +64,72 @@ def display_ps():
 # Power Table
 # --------------------------------------------------
 
-def display_power():
-    power_states = get_power_states(core_id=0)
+def display_power(leak_model="linear", compare=False):
+    """
+    Display power table.
+
+    Parameters
+    ----------
+    leak_model : str
+        'linear' or 'quadratic'
+    compare : bool
+        If True, compares both leakage models side-by-side
+    """
+
+    base_states = get_power_states(core_id=0,
+                                   leak_model="linear")
+
+    # Sort once for consistency
+    base_states = sorted(
+        base_states,
+        key=lambda x: x["cpu_percent"],
+        reverse=True
+    )[:10]
+
+    if compare:
+
+        print(
+            f"{'PID':<8}{'Name':<20}"
+            f"{'Linear(mW)':<15}{'Quad(mW)':<15}"
+            f"{'%Diff':<10}"
+        )
+        print("-" * 70)
+
+        for ps in base_states:
+
+            # Compute quadratic leakage using same telemetry snapshot
+            quad_leak = compute_leakage_power(
+                mem_kb=ps["mem_kb"],
+                voltage_v=ps["voltage_v"],
+                model="quadratic",
+            )
+
+            linear_leak = ps["p_leak_mw"]
+
+            diff = (
+                (quad_leak - linear_leak) /
+                max(linear_leak, 1e-6)
+            ) * 100
+
+            print(
+                f"{ps['pid']:<8}"
+                f"{ps['name']:<20}"
+                f"{linear_leak:<15.2f}"
+                f"{quad_leak:<15.2f}"
+                f"{diff:<10.2f}"
+            )
+
+        return
+
+    # Recompute if user selected quadratic
+    if leak_model == "quadratic":
+        for ps in base_states:
+            ps["p_leak_mw"] = compute_leakage_power(
+                mem_kb=ps["mem_kb"],
+                voltage_v=ps["voltage_v"],
+                model="quadratic",
+            )
+            ps["p_total_mw"] = ps["p_dyn_mw"] + ps["p_leak_mw"]
 
     print(
         f"{'PID':<8}{'Name':<20}{'CPU%':<8}{'Mem(KB)':<9}"
@@ -74,7 +138,7 @@ def display_power():
     )
     print("-" * 115)
 
-    for ps in sorted(power_states, key=lambda x: x["cpu_percent"], reverse=True)[:10]:
+    for ps in base_states:
         print(
             f"{ps['pid']:<8}"
             f"{ps['name']:<20}"
@@ -135,6 +199,15 @@ def main():
     power_parser = subparsers.add_parser("power", help="Show power table")
     power_parser.add_argument("-r", "--refresh", action="store_true")
     power_parser.add_argument("--interval", type=float, default=1.0)
+    power_parser.add_argument(
+    "--leak-model",
+    choices=["linear", "quadratic"],
+    default="linear",
+    help="Select leakage power model")
+    power_parser.add_argument(
+    "--compare-models",
+    action="store_true",
+    help="Compare linear and quadratic leakage models" )
 
     # ---------------- log ----------------
     log_parser = subparsers.add_parser("log", help="Log power over time")
@@ -157,6 +230,10 @@ def main():
         default="sched_weight",
         help="Enforcement mode",
     )
+    power_parser.add_argument(
+    "--compare-models",
+    action="store_true",
+    help="Compare linear and quadratic leakage models" )
 
     # budget list
     budget_sub.add_parser("list", help="List active budgets")
@@ -177,7 +254,19 @@ def main():
         refresh_mode(display_ps, args.interval) if args.refresh else display_ps()
 
     elif args.command == "power":
-        refresh_mode(display_power, args.interval) if args.refresh else display_power()
+      if args.refresh:
+          refresh_mode(
+              lambda: display_power(
+                  leak_model=args.leak_model,
+                  compare=args.compare_models
+              ),
+              args.interval
+          )
+      else:
+          display_power(
+              leak_model=args.leak_model,
+              compare=args.compare_models
+          )
 
     elif args.command == "log":
         cmd_log(args.interval, args.duration)

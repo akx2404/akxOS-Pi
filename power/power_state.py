@@ -22,7 +22,8 @@ from power.power_model import (
 )
 
 
-def get_power_states(core_id: int = 0) -> List[Dict]:
+def get_power_states(core_id: int = 0,
+                     leak_model: str = "linear") -> List[Dict]:
     """
     Compute power state for all active processes.
 
@@ -58,8 +59,9 @@ def get_power_states(core_id: int = 0) -> List[Dict]:
         )
 
         p_leak = compute_leakage_power(
-            mem_kb=proc["mem"],
-            voltage_v=voltage_v,
+          mem_kb=proc["mem"],
+          voltage_v=voltage_v,
+          model=leak_model,
         )
 
         power_states.append({

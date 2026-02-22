@@ -6,7 +6,14 @@ Pure power modeling equations.
 
 """
 
-from power.constants import ALPHA, C_EFF, K_LEAK
+from power.constants import (
+    ALPHA,
+    C_EFF,
+    K_LEAK,
+    LEAK_LINEAR_A,
+    LEAK_QUAD_A,
+    LEAK_QUAD_B,
+)
 
 
 def compute_dynamic_power(voltage_v: float,
@@ -36,11 +43,14 @@ def compute_dynamic_power(voltage_v: float,
 
 
 def compute_leakage_power(mem_kb: int,
-                          voltage_v: float) -> float:
+                          voltage_v: float,
+                          model: str = "linear") -> float:
     """
     Compute leakage power in milliwatts.
 
-    P_leak depends on memory footprint * voltage
+    Models:
+        linear     : K_LEAK * mem_kb * voltage
+        quadratic  : a*(mem_kb*V) + b*(mem_kb*V)^2
 
     Parameters
     ----------
@@ -48,11 +58,27 @@ def compute_leakage_power(mem_kb: int,
         Resident memory in kilobytes
     voltage_v : float
         Supply voltage in Volts
+    model : str
+        Leakage model ("linear" or "quadratic")
 
     Returns
     -------
     float
         Leakage power in milliwatts
     """
-    p_leak_w = K_LEAK * mem_kb * voltage_v
+
+    mv = mem_kb * voltage_v
+
+    if model == "linear":
+        p_leak_w = K_LEAK * mv
+
+    elif model == "quadratic":
+        p_leak_w = (
+            LEAK_QUAD_A * mv +
+            LEAK_QUAD_B * (mv ** 2)
+        )
+
+    else:
+        raise ValueError(f"Unknown leakage model: {model}")
+
     return p_leak_w * 1e3  # W → mW
