@@ -17,7 +17,7 @@ from budget.state import BudgetRuntimeState
 from budget.enforcers import (
     apply_nice,
     reset_nice,
-    apply_freq_cap,
+    apply_budget_dvfs,
     reset_freq_cap,
     apply_cgroup_quota,
     reset_cgroup,
@@ -181,14 +181,19 @@ class BudgetEngine:
     # =================================================
 
     def _apply_enforcement(self, pid: int, policy: BudgetPolicy, current_state):
-        if self.enforced.get(pid, False):
-            return
 
         if policy.mode == "sched_weight":
           apply_nice(pid)
 
         elif policy.mode == "dvfs_cap":
-          apply_freq_cap(600000)
+
+          current_power = current_state["p_total_mw"]
+
+          apply_budget_dvfs(
+              current_power_mw=current_power,
+              budget_mw=policy.power_limit_mw,
+              Kp=0.5
+          )
 
         elif policy.mode == "cpu_quota":
 
@@ -223,8 +228,6 @@ class BudgetEngine:
           )
 
           apply_cgroup_quota(pid, quota_us, period_us)
-
-        self.enforced[pid] = True
 
     def _relax_enforcement(self, pid: int, policy: BudgetPolicy):
         if not self.enforced.get(pid, False):
