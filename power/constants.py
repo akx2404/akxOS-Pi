@@ -25,7 +25,7 @@ not a transistor-accurate BSIM implementation.
 # ----------------------------------------------------------
 
 # Switching activity factor (typical system workload range: 0.1–0.5)
-ALPHA = 0.3
+ALPHA = 0.15
 
 # Effective switching capacitance (abstracted workload-level value)
 C_EFF = 1.2e-9

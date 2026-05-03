@@ -11,7 +11,6 @@ import math
 from power.constants import (
     ALPHA,
     C_EFF,
-    K_LEAK,
     LEAK_LINEAR_A,
     LEAK_QUAD_B,
     LEAK_EXP_B,
@@ -25,7 +24,7 @@ def compute_dynamic_power(voltage_v: float,
     """
     Compute dynamic power in milliwatts.
 
-    P_dyn depends on C_eff * V² * f * activity
+    P_dyn = α · C_eff · V² · f · activity
 
     Parameters
     ----------
@@ -34,7 +33,7 @@ def compute_dynamic_power(voltage_v: float,
     freq_hz : float
         Clock frequency in Hertz
     activity : float
-        Normalized activity factor (0.0-1.0)
+        Normalized activity factor (0.0–1.0)
 
     Returns
     -------
@@ -45,13 +44,27 @@ def compute_dynamic_power(voltage_v: float,
     return p_dyn_w * 1e3  # W → mW
 
 
-def compute_leakage_power(mem_kb, voltage_v, model):
+def compute_leakage_power(mem_kb: float,
+                          voltage_v: float,
+                          model: str) -> float:
     """
-    Compute leakage power (in mW)
-    """
+    Compute leakage power in milliwatts.
 
-    # Workload proxy (normalize memory usage)
-    M = max(mem_kb / 1024.0, 0.001)
+    Parameters
+    ----------
+    mem_kb : float
+        Process resident memory in KB
+    voltage_v : float
+        Supply voltage in Volts
+    model : str
+        One of: 'linear', 'quadratic', 'exponential'
+
+    Returns
+    -------
+    float
+        Leakage power in milliwatts
+    """
+    M = max(mem_kb / 1024.0, 0.001)  # Normalize to MB; floor to avoid zero
     V = voltage_v
 
     if model == "linear":
@@ -60,7 +73,7 @@ def compute_leakage_power(mem_kb, voltage_v, model):
     elif model == "quadratic":
         return (
             LEAK_LINEAR_A * M * V +
-            LEAK_QUAD_B * M * (V - V_NOM) ** 2
+            LEAK_QUAD_B  * M * (V - V_NOM) ** 2
         )
 
     elif model == "exponential":
@@ -70,4 +83,4 @@ def compute_leakage_power(mem_kb, voltage_v, model):
         )
 
     else:
-        raise ValueError(f"Unknown leakage model: {model}")
+        raise ValueError(f"Unknown leakage model: {model!r}")
