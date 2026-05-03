@@ -61,6 +61,7 @@ def reset_nice(pid: int):
 # ==========================================================
 
 CPU_SYS_PATH = Path("/sys/devices/system/cpu")
+CPU0_FREQ = CPU_SYS_PATH / "cpu0/cpufreq"
 
 
 def _cpu_list():
@@ -70,41 +71,83 @@ def _cpu_list():
     )
 
 
-def apply_freq_cap(freq_khz: int):
+def get_current_freq():
+    path = CPU0_FREQ / "scaling_cur_freq"
+    if path.exists():
+        return int(path.read_text().strip())
+    return None
+
+
+def get_available_freqs():
+    path = CPU0_FREQ / "scaling_available_frequencies"
+    if path.exists():
+        data = path.read_text()
+        return sorted([int(f) for f in data.split()])
+    return []
+
+
+def apply_budget_dvfs(current_power_mw: float,
+                      budget_mw: float,
+                      Kp: float = 0.5):
     """
-    Apply max frequency cap across all CPU cores.
+    Model-aware DVFS scaling using proportional feedback.
     """
+
+    if current_power_mw <= 0:
+        return
+
+    current_freq = get_current_freq()
+    if current_freq is None:
+        return
+
+    # Proportional correction
+    error_ratio = (budget_mw - current_power_mw) / current_power_mw
+    ratio = 1 + Kp * error_ratio
+
+    target_freq = int(current_freq * ratio)
+
+    freqs = get_available_freqs()
+    if not freqs:
+        return
+
+    # Clamp to nearest valid frequency
+    target_freq = min(freqs, key=lambda f: abs(f - target_freq))
+
+    # Enforce bounds
+    target_freq = max(min(freqs), min(target_freq, max(freqs)))
+
     try:
         for cpu in _cpu_list():
             path = cpu / "cpufreq" / "scaling_max_freq"
             if path.exists():
-                path.write_text(str(freq_khz))
+                path.write_text(str(target_freq))
 
-        print(f"[akxOS] Applied frequency cap: {freq_khz} kHz")
+        print(
+            f"[akxOS][dvfs] "
+            f"{current_power_mw:.1f}mW → target {budget_mw:.1f}mW | "
+            f"{current_freq} → {target_freq} kHz"
+        )
 
     except PermissionError:
         _warn("Permission denied. DVFS requires sudo.")
-    except Exception as e:
-        _warn(f"apply_freq_cap failed: {e}")
-
 
 def reset_freq_cap():
-    """
-    Reset max frequency to hardware maximum.
-    """
-    try:
-        for cpu in _cpu_list():
-            max_path = cpu / "cpufreq" / "cpuinfo_max_freq"
-            scale_path = cpu / "cpufreq" / "scaling_max_freq"
+  """
+  Reset max frequency to hardware maximum.
+  """
+  try:
+      for cpu in _cpu_list():
+          max_path = cpu / "cpufreq" / "cpuinfo_max_freq"
+          scale_path = cpu / "cpufreq" / "scaling_max_freq"
 
-            if max_path.exists() and scale_path.exists():
-                max_freq = max_path.read_text().strip()
-                scale_path.write_text(max_freq)
+          if max_path.exists() and scale_path.exists():
+              max_freq = max_path.read_text().strip()
+              scale_path.write_text(max_freq)
 
-        print("[akxOS] Reset frequency cap to hardware maximum")
+      print("[akxOS] Reset frequency cap to hardware maximum")
 
-    except Exception:
-        pass
+  except Exception:
+      pass
 
 
 # ==========================================================
