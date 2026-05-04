@@ -2,14 +2,8 @@
 /*
  * akxOS Kernel Power Budget Controller
  *
- * Core redesign: duty-cycle control via two workqueues
- * ====================================================
- *
- * Convergence (budget=60mW, baseline=216mW):
- *   Tick 0: quota=100%  → power=292mW (no throttle yet)
- *   Tick 1: quota=57.5% → power=168mW
- *   Tick 2: quota=33.9% → power= 99mW
- *   Tick 3: quota=21.1% → power= 62mW  ← settled within deadband
+ * Duty-cycle control via two workqueues + zero-power watchdog
+ * =====================================================
  */
 
 #include <linux/module.h>
@@ -259,7 +253,7 @@ static void akxos_measure_loop(struct work_struct *work)
 {
     int i, n = 0;
     unsigned long long now_ns = ktime_get_ns();
-    struct akxos_deferred_signal acts[AKXOS_MAX_BUDGETS];
+    struct akxos_deferred_signal acts[AKXOS_MAX_BUDGETS * 2];
 
     mutex_lock(&budget_lock);
 
@@ -274,6 +268,23 @@ static void akxos_measure_loop(struct work_struct *work)
         if (!budget_table[i].active) continue;
 
         pid  = budget_table[i].pid;
+
+        /*
+         * Safety resume at the start of each measurement window.
+         * Normally the resume work should have already fired. If it missed
+         * or was delayed, this prevents a PID from remaining SIGSTOP'd
+         * forever and producing endless power=0 samples.
+         */
+        if (budget_table[i].throttled &&
+            now_ns >= budget_table[i].throttle_until_ns) {
+            budget_table[i].throttled         = 0;
+            budget_table[i].throttle_until_ns = 0;
+            budget_table[i].stop_ms_last      = 0;
+            acts[n].pid        = pid;
+            acts[n].sig_action = AKXOS_SIG_CONT;
+            n++;
+        }
+
         task = akxos_get_task(pid);
         if (!task) {
             pr_info("akxOS: PID=%d gone, removing\n", pid);
@@ -326,6 +337,41 @@ static void akxos_measure_loop(struct work_struct *work)
 
         if (power > budget_table[i].budget_mw)
             budget_table[i].violation_total++;
+
+        /*
+         * Zero-power watchdog.
+         * A live CPU-bound workload should not report util=0/power=0 for
+         * repeated windows after we are actively budgeting it. That pattern
+         * usually means the task remained SIGSTOP'd because SIGCONT was
+         * missed/delayed, or the measurement sampled a fully stopped window.
+         *
+         * Do NOT feed this bogus sample into PI. Force SIGCONT, open quota,
+         * and let the next real window produce valid delta_exec.
+         */
+        if (util == 0 && power == 0) {
+            budget_table[i].zero_power_streak++;
+
+            if (budget_table[i].zero_power_streak >=
+                AKXOS_ZERO_POWER_STREAK_LIMIT) {
+                budget_table[i].throttled = 0;
+                budget_table[i].throttle_until_ns = 0;
+                budget_table[i].stop_ms_last = 0;
+                budget_table[i].current_cpu_quota_mpct =
+                    AKXOS_CPU_QUOTA_MAX_PCT * 100;
+
+                acts[n].pid = pid;
+                acts[n].sig_action = AKXOS_SIG_CONT;
+                n++;
+
+                pr_warn("akxOS: PID=%d zero-power watchdog fired "
+                        "streak=%d, forcing SIGCONT and skipping PI\n",
+                        pid, budget_table[i].zero_power_streak);
+            }
+
+            continue;
+        } else {
+            budget_table[i].zero_power_streak = 0;
+        }
 
         /* --- PI step --- */
         quota_pct = akxos_pi_step(&budget_table[i]);
@@ -434,6 +480,7 @@ static int akxos_set_budget(int pid, int budget_mw)
     budget_table[slot].energy_uj            = 0;
     budget_table[slot].energy_budget_uj     = 0;
     budget_table[slot].last_freq_khz        = akxos_get_freq_khz();
+    budget_table[slot].zero_power_streak    = 0;
     budget_table[slot].active               = 1;
 
     mutex_unlock(&budget_lock);
@@ -489,7 +536,7 @@ static int akxos_proc_show(struct seq_file *m, void *v)
 {
     int i;
     mutex_lock(&budget_lock);
-    seq_puts(m, "akxOS power budget controller v1.2  (duty-cycle, cond-integral)\n");
+    seq_puts(m, "akxOS power budget controller (duty-cycle, cond-integral, zero-watchdog)\n");
     seq_printf(m, "model: P_mw = (%llu * freq_khz * util_permille) / %llu\n",
                AKXOS_MODEL_CONST_FP, AKXOS_MODEL_DIVISOR);
     seq_puts(m,
@@ -563,6 +610,8 @@ static ssize_t akxos_proc_write(struct file *file,
                 AKXOS_CPU_QUOTA_MAX_PCT * 100;
             budget_table[slot].throttled              = 0;
             budget_table[slot].throttle_until_ns      = 0;
+            budget_table[slot].stop_ms_last            = 0;
+            budget_table[slot].zero_power_streak       = 0;
         } else ret = -ENOENT;
         mutex_unlock(&budget_lock);
         if (!ret) akxos_send_signal(pid, SIGCONT);
@@ -606,8 +655,9 @@ static int __init akxos_sched_init(void)
     schedule_delayed_work(&akxos_resume_work,
                           msecs_to_jiffies(AKXOS_RESUME_POLL_MS));
 
-    pr_info("akxOS: v1.2 loaded  measure=%dms  resume_poll=%dms  deadband=%dmW\n",
-            AKXOS_SAMPLE_INTERVAL_MS, AKXOS_RESUME_POLL_MS, AKXOS_PI_DEADBAND_MW);
+    pr_info("akxOS: v1.3 loaded  measure=%dms  resume_poll=%dms  deadband=%dmW zero_watchdog=%d\n",
+            AKXOS_SAMPLE_INTERVAL_MS, AKXOS_RESUME_POLL_MS, AKXOS_PI_DEADBAND_MW,
+            AKXOS_ZERO_POWER_STREAK_LIMIT);
     return 0;
 }
 
@@ -636,5 +686,5 @@ module_exit(akxos_sched_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("akxOS");
-MODULE_DESCRIPTION("akxOS duty-cycle power budget controller v1.2");
-MODULE_VERSION("1.2");
+MODULE_DESCRIPTION("akxOS duty-cycle power budget controller v1.3 zero-power watchdog");
+MODULE_VERSION("1.3");
