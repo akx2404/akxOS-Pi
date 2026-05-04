@@ -1,43 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * akxOS Kernel Power Budget Controller — v1.3
+ * akxOS Kernel Power Budget Controller
  *
  * Duty-cycle control via two workqueues + zero-power watchdog
  * =====================================================
- *
- * Problem with v1.0 (and root cause of the oscillation):
- *
- *   When SIGSTOP is applied, the process's sum_exec_runtime is frozen.
- *   The measurement loop reads delta_exec=0, computes util=0, power=0.
- *   The PI controller sees error = budget - 0 = +budget (large positive),
- *   concludes the process is well under budget, and immediately releases
- *   the throttle by driving quota to 100%.  The process resumes, spikes
- *   back to full power, and the cycle repeats at the measurement rate.
- *
- * Solution: duty-cycle control
- *
- *   akxos_control_loop (500ms period):
- *     1. Measure delta_exec / delta_wall → util → power
- *        [util naturally reflects the duty cycle from the previous window]
- *     2. Run PI → quota_pct
- *     3. Immediately send SIGSTOP (add to deferred list)
- *     4. Set throttle_until = now + stop_ms
- *        where stop_ms = (100 - quota_pct) * 500 / 100
- *
- *   akxos_resume_work (50ms poll):
- *     For each throttled entry with throttle_until <= now:
- *       Send SIGCONT → process runs for the remainder of the window
- *
- *   Effect: In a 500ms window with quota=20%:
- *     - Stopped from T=0 to T=400ms  (stop_ms = 400ms)
- *     - Running from T=400ms to T=500ms (run_ms = 100ms)
- *     - delta_exec = 100ms, delta_wall = 500ms → util=200 → P≈58mW ✓
- *
- * Convergence (budget=60mW, baseline=216mW):
- *   Tick 0: quota=100%  → power=292mW (no throttle yet)
- *   Tick 1: quota=57.5% → power=168mW
- *   Tick 2: quota=33.9% → power= 99mW
- *   Tick 3: quota=21.1% → power= 62mW  ← settled within deadband
  */
 
 #include <linux/module.h>

@@ -1,18 +1,6 @@
 #!/usr/bin/env python3
 """
 akxOS Budget Sweep + Settling Experiment
-========================================
-
-Runs one or more akxOS scheduler power-budget experiments and produces:
-  1. Per-budget CSV
-  2. Per-budget detailed plot
-  3. Combined overlay plot across budgets
-  4. Summary CSV/table with settling time, SS mean, SS error, SS sigma, overshoot
-
-Recommended:
-  cd ~/akxOS-Pi
-  python3 tests/experiment_settling.py --budgets 60 80 100 --duration 30
-"""
 
 import argparse
 import csv

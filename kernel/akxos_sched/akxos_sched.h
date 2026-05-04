@@ -2,7 +2,7 @@
 #define AKXOS_SCHED_H
 
 /* ============================================================
- * akxOS Kernel Power Budget Controller — v1.3
+ * akxOS Kernel Power Budget Controlle
  * ============================================================
  * Duty-cycle SIGSTOP/SIGCONT power-budget controller with zero-power watchdog.
  *
@@ -45,19 +45,26 @@
  * many measurement windows, force SIGCONT and skip PI for that sample. */
 #define AKXOS_ZERO_POWER_STREAK_LIMIT 2
 
+/* =================================================================
+ * Per-process budget entry
+ * ================================================================= */
 struct akxos_budget_entry {
-    int pid;
-    int budget_mw;
 
+    int  pid;
+    int  budget_mw;
+
+    /* Measurement */
     unsigned long long last_exec_runtime_ns;
     unsigned long long last_wall_time_ns;
     int util_permille;
     int estimated_power_mw;
 
+    /* PI state — no prev_error_mw (zero-crossing reset removed) */
     int error_mw;
     int integral_error_mw;
     int current_cpu_quota_mpct; /* quota ×100 */
 
+    /* Duty-cycle throttle */
     int throttled;
     unsigned long long throttle_until_ns;
     unsigned long long stop_ms_last;
