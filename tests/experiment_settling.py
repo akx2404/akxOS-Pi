@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 akxOS Budget Sweep + Settling Experiment
+"""
 
 import argparse
 import csv
@@ -11,12 +12,9 @@ import time
 from collections import deque
 from pathlib import Path
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import numpy as np
-
 
 # ─────────────────────────────────────────────────────────────
 # Configuration
@@ -59,7 +57,7 @@ def check_driver_or_exit():
     if "akxOS power budget controller" not in first:
         print("[error] Wrong/stale driver loaded.", file=sys.stderr)
         print(f"Current /proc header: {first}", file=sys.stderr)
-        print("Expected: akxOS power budget controller v1.3", file=sys.stderr)
+        print("Expected: akxOS power budget controller", file=sys.stderr)
         sys.exit(1)
 
 

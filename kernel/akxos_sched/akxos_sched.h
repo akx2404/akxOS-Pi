@@ -1,4 +1,4 @@
-\#ifndef AKXOS_SCHED_H
+#ifndef AKXOS_SCHED_H
 #define AKXOS_SCHED_H
 
 /* ============================================================

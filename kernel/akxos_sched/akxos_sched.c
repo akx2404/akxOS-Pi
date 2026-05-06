@@ -655,7 +655,7 @@ static int __init akxos_sched_init(void)
     schedule_delayed_work(&akxos_resume_work,
                           msecs_to_jiffies(AKXOS_RESUME_POLL_MS));
 
-    pr_info("akxOS: v1.3 loaded  measure=%dms  resume_poll=%dms  deadband=%dmW zero_watchdog=%d\n",
+    pr_info("akxOS: loaded  measure=%dms  resume_poll=%dms  deadband=%dmW zero_watchdog=%d\n",
             AKXOS_SAMPLE_INTERVAL_MS, AKXOS_RESUME_POLL_MS, AKXOS_PI_DEADBAND_MW,
             AKXOS_ZERO_POWER_STREAK_LIMIT);
     return 0;
@@ -686,5 +686,5 @@ module_exit(akxos_sched_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("akxOS");
-MODULE_DESCRIPTION("akxOS duty-cycle power budget controller v1.3 zero-power watchdog");
+MODULE_DESCRIPTION("akxOS duty-cycle power budget controller zero-power watchdog");
 MODULE_VERSION("1.3");
