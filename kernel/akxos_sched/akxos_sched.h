@@ -38,7 +38,7 @@
 #define AKXOS_PI_INTEG_THRESH_MW 8
 #define AKXOS_INTEGRAL_LIMIT     80
 
-#define AKXOS_CPU_QUOTA_MIN_PCT  25
+#define AKXOS_CPU_QUOTA_MIN_PCT  15
 #define AKXOS_CPU_QUOTA_MAX_PCT  100
 
 /* Zero-power watchdog: if a live PID reports zero util/power for this
